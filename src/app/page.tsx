@@ -1,103 +1,281 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import Background from "@/components/Background";
+import FoodImage from "@/components/FoodImage";
+import { api, ensureIdentity, friendlyError, loadIdentity, type Identity, type MyRoom } from "@/lib/api";
+import { sfx } from "@/lib/fx";
+
+export default function Page() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <Suspense>
+      <Home />
+    </Suspense>
+  );
+}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+function Home() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const inviteCode = (params.get("kod") ?? "").toUpperCase().slice(0, 4);
+
+  const [ready, setReady] = useState(false);
+  const [me, setMe] = useState<Identity | null>(null);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState(inviteCode);
+  const [joining, setJoining] = useState(!!inviteCode);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<MyRoom[] | null>(null);
+
+  useEffect(() => {
+    const id = loadIdentity();
+    setMe(id);
+    if (id) setName(id.name);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!me) return;
+    api.myRooms(me.token).then(setRooms).catch(() => setRooms([]));
+  }, [me]);
+
+  async function saveName() {
+    const n = name.trim();
+    if (!n) return;
+    setBusy(true);
+    setError(null);
+    try {
+      sfx.select();
+      const id = await ensureIdentity(n);
+      setMe(id);
+      if (inviteCode) await join(id, inviteCode);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function create() {
+    if (!me) return;
+    setBusy(true);
+    setError(null);
+    try {
+      sfx.select();
+      const r = await api.createRoom(me.token);
+      router.push(`/oda/${r.id}`);
+    } catch (e) {
+      setError(friendlyError(e));
+      setBusy(false);
+    }
+  }
+
+  async function join(id: Identity, c: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.joinRoom(id.token, c);
+      sfx.select();
+      router.push(`/oda/${r.id}`);
+    } catch (e) {
+      setError(friendlyError(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="relative min-h-dvh overflow-x-hidden">
+      <Background />
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col px-4 safe-top safe-bottom">
+        <Logo />
+
+        <AnimatePresence mode="wait">
+          {!ready ? null : !me ? (
+            <motion.section
+              key="name"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="mt-6 flex flex-col gap-4"
+            >
+              {inviteCode && (
+                <p className="glass rounded-2xl px-4 py-3 text-center text-lg">
+                  <b className="text-accent">{inviteCode}</b> odasına davet edildin! 🎉
+                </p>
+              )}
+              <label className="text-center text-xl font-semibold">Sana ne diyelim?</label>
+              <input
+                autoFocus
+                value={name}
+                maxLength={24}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveName()}
+                placeholder="Kullanıcı adın"
+                className="rounded-2xl bg-cream px-5 py-4 text-center text-2xl font-semibold text-ink outline-none ring-4 ring-transparent focus:ring-accent"
+              />
+              <button
+                disabled={!name.trim() || busy}
+                onClick={saveName}
+                className="btn-3d bg-accent py-4 text-2xl text-ink"
+                style={{ ["--shade" as string]: "#c9962e" }}
+              >
+                {busy ? "..." : "Hadi başlayalım!"}
+              </button>
+            </motion.section>
+          ) : (
+            <motion.section
+              key="menu"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="mt-4 flex flex-col gap-4"
+            >
+              <p className="text-center text-xl">
+                Selam <b className="text-accent">{me.name}</b>! 👋{" "}
+                <button className="text-sm underline opacity-70" onClick={() => setMe(null)}>
+                  değiştir
+                </button>
+              </p>
+
+              {!joining ? (
+                <>
+                  <button
+                    disabled={busy}
+                    onClick={create}
+                    className="btn-3d bg-pink py-5 text-2xl text-white"
+                    style={{ ["--shade" as string]: "#b23a60" }}
+                  >
+                    🍽️ Oda kur
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      sfx.tap();
+                      setJoining(true);
+                    }}
+                    className="btn-3d bg-cream py-5 text-2xl text-ink"
+                    style={{ ["--shade" as string]: "#cdbfa9" }}
+                  >
+                    🔑 Koda katıl
+                  </button>
+                </>
+              ) : (
+                <div className="glass flex flex-col gap-3 rounded-3xl p-4">
+                  <p className="text-center text-lg font-semibold">Arkadaşının oda kodu</p>
+                  <input
+                    autoFocus
+                    value={code}
+                    maxLength={4}
+                    onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                    onKeyDown={(e) => e.key === "Enter" && code.length === 4 && join(me, code)}
+                    placeholder="ABCD"
+                    className="rounded-2xl bg-cream px-5 py-4 text-center text-4xl font-bold tracking-[0.5em] text-ink uppercase outline-none ring-4 ring-transparent focus:ring-accent"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setJoining(false)}
+                      className="btn-3d flex-1 bg-white/20 py-3 text-lg"
+                    >
+                      Geri
+                    </button>
+                    <button
+                      disabled={code.length !== 4 || busy}
+                      onClick={() => join(me, code)}
+                      className="btn-3d flex-[2] bg-accent py-3 text-xl text-ink"
+                      style={{ ["--shade" as string]: "#c9962e" }}
+                    >
+                      {busy ? "..." : "Katıl"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {rooms && rooms.length > 0 && (
+                <div className="mt-2">
+                  <h2 className="mb-2 text-lg font-semibold opacity-90">Kaldığın yerden devam et</h2>
+                  <ul className="flex flex-col gap-2">
+                    {rooms.slice(0, 6).map((r) => (
+                      <li key={r.id}>
+                        <button
+                          onClick={() => {
+                            sfx.tap();
+                            router.push(`/oda/${r.id}`);
+                          }}
+                          className="glass flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition active:scale-[0.98]"
+                        >
+                          <span>
+                            <span className="block text-lg font-semibold">
+                              {r.partner ? `${r.partner} ile` : "Arkadaş bekleniyor"}
+                            </span>
+                            <span className="text-sm opacity-70">
+                              Oda {r.code} · {r.rounds} tur
+                            </span>
+                          </span>
+                          <span className="text-2xl">▶</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {error && (
+            <motion.p
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="mt-4 rounded-2xl bg-red-500/90 px-4 py-3 text-center font-semibold"
+            >
+              {error}
+            </motion.p>
+          )}
+        </AnimatePresence>
+
+        <p className="mt-auto pt-8 text-center text-sm opacity-60">
+          Aynı yemeğe aynı cevabı verin, uyumunuzu görün 💞
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function Logo() {
+  const foods = ["🍔", "🍩", "🥙"];
+  return (
+    <div className="mt-6 flex flex-col items-center">
+      <div className="relative flex h-32 items-end justify-center gap-1">
+        {foods.map((e, i) => (
+          <motion.div
+            key={e}
+            initial={{ y: 60, opacity: 0, rotate: -20 }}
+            animate={{ y: [0, -14, 0], opacity: 1, rotate: [(i - 1) * 12, (i - 1) * 12 + 6, (i - 1) * 12] }}
+            transition={{
+              y: { duration: 1.6, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" },
+              rotate: { duration: 1.6, repeat: Infinity, delay: i * 0.2 },
+              opacity: { duration: 0.4, delay: i * 0.1 },
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <FoodImage emoji={e} size={i === 1 ? 110 : 84} />
+          </motion.div>
+        ))}
+      </div>
+      <motion.h1
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.2 }}
+        className="text-stroke mt-2 text-center text-5xl leading-[0.95] font-bold"
+      >
+        <span className="text-accent">Yer misin</span>
+        <br />
+        <span className="text-pink">Yemez misin?</span>
+      </motion.h1>
     </div>
   );
 }

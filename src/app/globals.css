@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #2a1257;
+  --bg-2: #4a1a7a;
+  --ink: #2b1440;
+  --cream: #fff8ef;
+  --yes: #22c55e;
+  --yes-dark: #15803d;
+  --no: #ef4444;
+  --no-dark: #b91c1c;
+  --maybe: #f59e0b;
+  --maybe-dark: #b45309;
+  --accent: #ffd166;
+  --pink: #ff5e8a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
+  --color-ink: var(--ink);
+  --color-cream: var(--cream);
+  --color-accent: var(--accent);
+  --color-pink: var(--pink);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: #fff;
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Arka plan: hareketli renk lekeleri */
+.blob-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: radial-gradient(120% 80% at 50% 0%, var(--bg-2) 0%, var(--bg) 60%, #1a0b38 100%);
+  pointer-events: none;
+}
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, -40px) scale(1.15); }
+  100% { transform: translate(-30px, 30px) scale(0.95); }
+}
+.float-emoji {
+  position: absolute;
+  bottom: -60px;
+  opacity: 0.18;
+  animation: rise linear infinite;
+}
+@keyframes rise {
+  from { transform: translateY(0) rotate(0deg); }
+  to { transform: translateY(-120vh) rotate(360deg); }
+}
+
+/* Oyun butonu: tıklanınca içeri giren kalın gölge */
+.btn-3d {
+  position: relative;
+  border-radius: 1.4rem;
+  font-weight: 700;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s;
+  box-shadow: 0 6px 0 var(--shade, rgba(0, 0, 0, 0.35)), 0 12px 24px rgba(0, 0, 0, 0.25);
+  user-select: none;
+}
+.btn-3d:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 var(--shade, rgba(0, 0, 0, 0.35)), 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+.btn-3d:disabled {
+  filter: grayscale(0.6) brightness(0.85);
+  cursor: not-allowed;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.text-stroke {
+  -webkit-text-stroke: 2px rgba(43, 20, 64, 0.9);
+  paint-order: stroke fill;
+}
+
+.safe-top { padding-top: max(env(safe-area-inset-top), 12px); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 16px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .blob, .float-emoji { animation: none; }
 }
