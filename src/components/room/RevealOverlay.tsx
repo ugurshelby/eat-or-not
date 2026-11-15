@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import FoodImage from "@/components/FoodImage";
-import { FOOD_BY_ID } from "@/lib/foods";
+import { getFood } from "@/lib/foods";
 import { CHOICE_META } from "@/lib/game";
 import { burstConfetti, sfx } from "@/lib/fx";
 import type { Choice } from "@/lib/api";
@@ -25,7 +25,7 @@ export default function RevealOverlay({
   onDone: () => void;
 }) {
   const match = reveal.mine === reveal.theirs;
-  const food = FOOD_BY_ID[reveal.foodId];
+  const food = getFood(reveal.foodId);
   const line = useMemo(() => {
     if (match && reveal.mine === 2) return "İkiniz de denemediniz! Birlikte deneyin 🤝";
     if (match && reveal.mine === 0) return "İkiniz de yemezsiniz!";
@@ -56,6 +56,8 @@ export default function RevealOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.25 } }}
       onClick={onDone}
+      data-testid="reveal"
+      data-match={String(match)}
       className="fixed inset-0 z-40 flex flex-col items-center justify-center px-6"
       style={{
         background: match

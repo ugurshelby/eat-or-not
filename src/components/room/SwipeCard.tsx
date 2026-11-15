@@ -41,13 +41,14 @@ export default function SwipeCard(p: Props) {
   const chosen = p.myChoice;
 
   return (
-    <div className="mt-3 flex flex-1 flex-col">
+    <div data-testid="card" data-idx={p.index} data-mine={p.myChoice ?? ""} className="mt-3 flex flex-1 flex-col">
       <div className="relative flex flex-1 items-center justify-center">
         {/* arkadaki kartlar: deste hissi */}
         <div className="absolute h-[92%] w-[86%] translate-y-5 rotate-3 rounded-[2.2rem] bg-white/10" />
         <div className="absolute h-[94%] w-[90%] translate-y-2.5 -rotate-2 rounded-[2.2rem] bg-white/15" />
 
         <motion.div
+          data-testid="card-drag"
           drag={!p.disabled}
           dragSnapToOrigin={false}
           dragElastic={0.9}
@@ -209,6 +210,7 @@ function ChoiceButton({
   return (
     <motion.button
       whileTap={{ scale: 0.92 }}
+      data-testid={`choice-${c}`}
       onClick={onClick}
       disabled={disabled}
       animate={active ? { scale: [1, 1.12, 1] } : {}}

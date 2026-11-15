@@ -42,3 +42,10 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# playwright
+/playwright-report
+/test-results
+
+# kişisel linkler (gizli)
+*.local.txt

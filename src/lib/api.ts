@@ -2,7 +2,7 @@ import { supabase } from "./supabase";
 
 export type Choice = 0 | 1 | 2; // 0 yemem, 1 yerim, 2 hiç denemedim
 
-export type Identity = { id: string; token: string; name: string };
+export type Identity = { id: string; token: string; name: string; home_room?: string | null };
 
 export type RoomState = {
   room: { id: string; code: string; created_at: string };
@@ -24,6 +24,7 @@ export type MyRoom = {
   updated_at: string;
   partner: string | null;
   rounds: number;
+  is_home?: boolean;
 };
 
 const KEY = "ymym.identity";
@@ -37,7 +38,7 @@ export function loadIdentity(): Identity | null {
   }
 }
 
-function saveIdentity(id: Identity) {
+export function saveIdentity(id: Identity) {
   try {
     localStorage.setItem(KEY, JSON.stringify(id));
   } catch {}
@@ -87,12 +88,16 @@ export const api = {
       p_choice: choice,
     }),
   myRooms: (token: string) => rpc<MyRoom[]>("list_my_rooms", { p_token: token }),
+  deleteRoom: (token: string, room: string) =>
+    rpc<void>("delete_room", { p_token: token, p_room: room }),
+  claimLink: (key: string) => rpc<Identity | null>("claim_link", { p_key: key }),
 };
 
 export function friendlyError(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   if (m.includes("room not found")) return "Böyle bir oda yok. Kodu kontrol et.";
   if (m.includes("room full")) return "Bu oda dolu, iki kişi zaten oynuyor.";
+  if (m.includes("protected room")) return "Bu sizin ana odanız, silinemez.";
   if (m.includes("not a member")) return "Bu odaya erişimin yok.";
   if (m.includes("unknown player")) return "Oturum bulunamadı, ana sayfadan tekrar gir.";
   if (m.includes("Failed to fetch")) return "Bağlantı sorunu. İnternetini kontrol et.";

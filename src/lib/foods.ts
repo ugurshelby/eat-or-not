@@ -280,7 +280,12 @@ export const FOODS: Food[] = [
   f("mavi-peynir", "Küflü rokfor", "🧀", "cesur"),
 ];
 
+// UYARI: Kayıtlı turlar bu id'leri saklar. Var olan bir id'yi asla değiştirme/silme; sadece yeni ekle.
 export const FOOD_BY_ID: Record<string, Food> = Object.fromEntries(FOODS.map((x) => [x.id, x]));
+
+export function getFood(id: string): Food {
+  return FOOD_BY_ID[id] ?? { id, name: id, emoji: "🍽️", cat: "anayemek" };
+}
 
 /** Fluent 3D emoji görseli (lobehub paketi, jsdelivr üzerinden). */
 export function emojiUrl(emoji: string): string {

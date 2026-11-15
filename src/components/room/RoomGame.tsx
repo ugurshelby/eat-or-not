@@ -12,7 +12,7 @@ import Summary from "./Summary";
 import Archive from "./Archive";
 import { api, friendlyError, loadIdentity, type Choice, type Identity, type RoomState } from "@/lib/api";
 import { buildRounds, nextRoundItems, toRound, type RoundView } from "@/lib/game";
-import { FOOD_BY_ID } from "@/lib/foods";
+import { emojiUrl, getFood } from "@/lib/foods";
 import { supabase } from "@/lib/supabase";
 import { isMuted, setMuted, sfx } from "@/lib/fx";
 
@@ -33,6 +33,9 @@ export default function RoomGame({ id }: { id: string }) {
   const activeRoundRef = useRef<number | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const creatingRef = useRef(false);
+  const revealedRef = useRef(new Set<string>());
+  const seqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
 
   useEffect(() => {
     activeRoundRef.current = activeRound;
@@ -43,49 +46,74 @@ export default function RoomGame({ id }: { id: string }) {
     setTimeout(() => setToast((cur) => (cur === t ? null : cur)), 2600);
   }, []);
 
+  const markRevealed = useCallback((round: number, idx: number) => {
+    const k = `${round}:${idx}`;
+    if (revealedRef.current.has(k)) return false;
+    revealedRef.current.add(k);
+    return true;
+  }, []);
+
   const refresh = useCallback(async () => {
     const ident = loadIdentity();
     if (!ident) return;
+    const mySeq = ++seqRef.current;
     try {
       const next = await api.state(ident.token, id);
+      // Daha yeni bir istek zaten uygulandıysa bu eski cevabı at.
+      if (mySeq < appliedSeqRef.current) return;
+      appliedSeqRef.current = mySeq;
       const prev = stateRef.current;
+      const nextRounds = buildRounds(next);
+      const maxNext = nextRounds.reduce((m, r) => Math.max(m, r.roundNo), 0);
 
-      // Partner az önce katıldı mı?
-      if (prev && !prev.partner && next.partner) {
-        sfx.joined();
-        showToast(`${next.partner.name} katıldı! 🎉`);
-      }
-
-      // Beklediğim bir kartın cevabı geldi mi? → açılış animasyonu
-      if (prev) {
-        const prevRounds = buildRounds(prev);
-        const nextRounds = buildRounds(next);
+      if (!prev) {
+        // İlk yükleme: zaten açılmış kartlar için animasyon oynatma.
+        for (const r of nextRounds)
+          r.cells.forEach((c, i) => c.mine !== null && c.theirs !== null && markRevealed(r.roundNo, i));
+      } else {
+        // Partner az önce katıldı mı?
+        if (!prev.partner && next.partner) {
+          sfx.joined();
+          showToast(`${next.partner.name} katıldı! 🎉`);
+        }
+        // Yeni tur açıldıysa (kim açarsa açsın) oraya geç.
+        const maxPrev = prev.rounds.reduce((m, r) => Math.max(m, r.round_no), 0);
+        if (maxPrev > 0 && maxNext > maxPrev) {
+          activeRoundRef.current = maxNext;
+          setActiveRound(maxNext);
+          setView("play");
+          if (!creatingRef.current) showToast(`Tur ${maxNext} başladı 🚀`);
+        }
+        // Aktif turda yeni iki-taraflı tamamlanan kart → açılış animasyonu
         const ar = activeRoundRef.current;
-        for (const nr of nextRounds) {
-          if (nr.roundNo !== ar) continue;
-          const pr = prevRounds.find((r) => r.roundNo === nr.roundNo);
-          if (!pr) continue;
+        const nr = nextRounds.find((r) => r.roundNo === ar);
+        if (nr) {
           nr.cells.forEach((c, i) => {
-            const p = pr.cells[i];
-            if (p && p.mine !== null && p.theirs === null && c.mine !== null && c.theirs !== null) {
+            if (c.mine !== null && c.theirs !== null && markRevealed(nr.roundNo, i)) {
               setReveal({ round: nr.roundNo, idx: i, foodId: nr.items[i], mine: c.mine, theirs: c.theirs });
             }
           });
         }
+        // Diğer turlarda tamamlananları sessizce işaretle
+        for (const r of nextRounds)
+          if (r.roundNo !== ar)
+            r.cells.forEach((c, i) => c.mine !== null && c.theirs !== null && markRevealed(r.roundNo, i));
       }
 
       stateRef.current = next;
       setState(next);
       setError(null);
       setActiveRound((cur) => {
-        const max = next.rounds.reduce((m, r) => Math.max(m, r.round_no), 0);
-        if (cur === null || !next.rounds.some((r) => r.round_no === cur)) return max || null;
+        if (cur === null || !next.rounds.some((r) => r.round_no === cur)) {
+          activeRoundRef.current = maxNext || null;
+          return maxNext || null;
+        }
         return cur;
       });
     } catch (e) {
       setError(friendlyError(e));
     }
-  }, [id, showToast]);
+  }, [id, showToast, markRevealed]);
 
   // İlk yükleme
   useEffect(() => {
@@ -106,14 +134,7 @@ export default function RoomGame({ id }: { id: string }) {
       config: { broadcast: { self: false }, presence: { key: me.id } },
     });
     ch.on("broadcast", { event: "answered" }, () => void refresh())
-      .on("broadcast", { event: "round" }, ({ payload }) => {
-        void refresh().then(() => {
-          const r = (payload as { round: number; by: string }).round;
-          setActiveRound(r);
-          setView("play");
-          showToast(`${(payload as { by: string }).by} yeni tura geçti 🚀`);
-        });
-      })
+      .on("broadcast", { event: "round" }, () => void refresh())
       .on("broadcast", { event: "joined" }, () => void refresh())
       .on("presence", { event: "sync" }, () => {
         const keys = Object.keys(ch.presenceState());
@@ -179,6 +200,16 @@ export default function RoomGame({ id }: { id: string }) {
     [broadcast, id, refresh],
   );
 
+  // Turdaki görselleri önceden indir: kart geçişleri takılmasın.
+  const curItemsKey = cur?.items.join(",") ?? "";
+  useEffect(() => {
+    if (!curItemsKey) return;
+    for (const fid of curItemsKey.split(",")) {
+      const img = new Image();
+      img.src = emojiUrl(getFood(fid).emoji);
+    }
+  }, [curItemsKey]);
+
   // Partner geldiyse ve hiç tur yoksa ilk turu oluştur
   useEffect(() => {
     if (state?.partner && state.rounds.length === 0) void startRound(1);
@@ -191,7 +222,7 @@ export default function RoomGame({ id }: { id: string }) {
     sfx.select();
     try {
       const res = await api.answer(ident.token, id, cur.roundNo, curIdx, choice);
-      if (res.theirs !== null && res.mine !== null) {
+      if (res.theirs !== null && res.mine !== null && markRevealed(cur.roundNo, curIdx)) {
         setReveal({ round: cur.roundNo, idx: curIdx, foodId: cur.items[curIdx], mine: res.mine, theirs: res.theirs });
       }
       broadcast("answered", { round: cur.roundNo, idx: curIdx });
@@ -270,9 +301,9 @@ export default function RoomGame({ id }: { id: string }) {
   } else {
     const idx = reveal && reveal.round === cur.roundNo ? reveal.idx : curIdx;
     const cell = cur.cells[idx];
-    const food = FOOD_BY_ID[cur.items[idx]];
+    const food = getFood(cur.items[idx]);
     body = (
-      <div className="flex flex-1 flex-col">
+      <div data-testid="play" data-round={cur.roundNo} className="flex flex-1 flex-col">
         <ProgressDots round={cur} active={idx} />
         <SwipeCard
           key={`${cur.roundNo}-${idx}`}

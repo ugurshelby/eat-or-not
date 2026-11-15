@@ -56,7 +56,7 @@ export default function Summary({
   const C = 2 * Math.PI * R;
 
   return (
-    <div className="flex flex-1 flex-col pb-2">
+    <div data-testid="summary" data-pct={pct} data-round={round.roundNo} className="flex flex-1 flex-col pb-2">
       <motion.div
         initial={{ y: 40, opacity: 0, scale: 0.9 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}

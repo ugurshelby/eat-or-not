@@ -5,7 +5,7 @@ import FoodImage from "@/components/FoodImage";
 
 export default function Lobby({ code, onShare }: { code: string; onShare: () => void }) {
   return (
-    <div className="mt-6 flex flex-1 flex-col items-center text-center">
+    <div data-testid="lobby" data-code={code} className="mt-6 flex flex-1 flex-col items-center text-center">
       <motion.div
         animate={{ rotate: [0, -8, 8, 0], y: [0, -8, 0] }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}

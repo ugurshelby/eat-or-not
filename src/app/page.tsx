@@ -42,6 +42,22 @@ function Home() {
     api.myRooms(me.token).then(setRooms).catch(() => setRooms([]));
   }, [me]);
 
+  const homeRoom = rooms?.find((r) => r.is_home && r.id === me?.home_room) ?? rooms?.find((r) => r.is_home) ?? null;
+  const otherRooms = (rooms ?? []).filter((r) => !r.is_home);
+
+  async function removeRoom(r: MyRoom) {
+    if (!me) return;
+    const who = r.partner ? `${r.partner} ile oynadığın` : "bu";
+    if (!confirm(`${who} odayı ve tüm cevaplarını kalıcı olarak silmek istiyor musun?`)) return;
+    try {
+      await api.deleteRoom(me.token, r.id);
+      setRooms((list) => (list ?? []).filter((x) => x.id !== r.id));
+      sfx.tap();
+    } catch (e) {
+      setError(friendlyError(e));
+    }
+  }
+
   async function saveName() {
     const n = name.trim();
     if (!n) return;
@@ -133,12 +149,32 @@ function Home() {
               exit={{ opacity: 0, y: -30 }}
               className="mt-4 flex flex-col gap-4"
             >
-              <p className="text-center text-xl">
-                Selam <b className="text-accent">{me.name}</b>! 👋{" "}
-                <button className="text-sm underline opacity-70" onClick={() => setMe(null)}>
-                  değiştir
+              {me.home_room ? (
+                <p className="text-center text-2xl">
+                  Hoş geldin <b className="text-accent">{me.name}</b>! 💖
+                </p>
+              ) : (
+                <p className="text-center text-xl">
+                  Selam <b className="text-accent">{me.name}</b>! 👋{" "}
+                  <button className="text-sm underline opacity-70" onClick={() => setMe(null)}>
+                    değiştir
+                  </button>
+                </p>
+              )}
+
+              {homeRoom && (
+                <button
+                  onClick={() => {
+                    sfx.select();
+                    router.push(`/oda/${homeRoom.id}`);
+                  }}
+                  className="btn-3d flex items-center justify-center gap-3 bg-accent py-5 text-2xl text-ink"
+                  style={{ ["--shade" as string]: "#c9962e" }}
+                >
+                  <FoodImage emoji="💞" size={40} />
+                  {homeRoom.partner ? `${homeRoom.partner} ile oyna` : "Ana masaya git"}
                 </button>
-              </p>
+              )}
 
               {!joining ? (
                 <>
@@ -193,21 +229,21 @@ function Home() {
                 </div>
               )}
 
-              {rooms && rooms.length > 0 && (
+              {otherRooms.length > 0 && (
                 <div className="mt-2">
                   <h2 className="mb-2 text-lg font-semibold opacity-90">Kaldığın yerden devam et</h2>
                   <ul className="flex flex-col gap-2">
-                    {rooms.slice(0, 6).map((r) => (
-                      <li key={r.id}>
+                    {otherRooms.slice(0, 8).map((r) => (
+                      <li key={r.id} data-testid="room-row" data-code={r.code} className="glass flex items-center rounded-2xl">
                         <button
                           onClick={() => {
                             sfx.tap();
                             router.push(`/oda/${r.id}`);
                           }}
-                          className="glass flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition active:scale-[0.98]"
+                          className="flex min-w-0 flex-1 items-center justify-between px-4 py-3 text-left transition active:scale-[0.98]"
                         >
-                          <span>
-                            <span className="block text-lg font-semibold">
+                          <span className="min-w-0">
+                            <span className="block truncate text-lg font-semibold">
                               {r.partner ? `${r.partner} ile` : "Arkadaş bekleniyor"}
                             </span>
                             <span className="text-sm opacity-70">
@@ -215,6 +251,13 @@ function Home() {
                             </span>
                           </span>
                           <span className="text-2xl">▶</span>
+                        </button>
+                        <button
+                          aria-label="Odayı sil"
+                          onClick={() => removeRoom(r)}
+                          className="mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-black/20 text-xl transition active:scale-90"
+                        >
+                          🗑️
                         </button>
                       </li>
                     ))}
